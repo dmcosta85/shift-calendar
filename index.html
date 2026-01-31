@@ -9,7 +9,22 @@
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
 
   <style>
+    /* ---------- Theme variables (LIGHT default) ---------- */
     :root{
+      --bg: #ffffff;
+      --panel: #ffffff;
+      --text: #0b0d12;
+      --muted: #56607a;
+      --border: #e3e7f2;
+
+      --day: #1e88e5;
+      --night: #8e24aa;
+      --aft: #fb8c00;
+      --off: #2e7d32;
+    }
+
+    /* ---------- Theme variables (DARK) ---------- */
+    [data-theme="dark"]{
       --bg: #0f1115;
       --panel: #141824;
       --text: #e7e9ee;
@@ -25,14 +40,17 @@
     body { font-family: Arial, sans-serif; margin: 16px; background: var(--bg); color: var(--text); }
     .bar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
     select, button { padding: 8px; background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 10px; }
-    select:focus, button:focus { outline: 2px solid rgba(255,255,255,0.12); outline-offset: 2px; }
+    select:focus, button:focus { outline: 2px solid rgba(0,0,0,0.08); outline-offset: 2px; }
+    [data-theme="dark"] select:focus,
+    [data-theme="dark"] button:focus { outline: 2px solid rgba(255,255,255,0.12); }
 
     #calendar { max-width: 1100px; margin: 0 auto; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 10px; }
 
     .legend { display:flex; gap:12px; align-items:center; flex-wrap:wrap; color: var(--muted); }
     .dot { width:12px; height:12px; border-radius:50%; display:inline-block; margin-right:6px; }
     .note { max-width:1100px; margin: 10px auto 0 auto; color: var(--muted); font-size: 13px; line-height: 1.35; }
-    code { background: rgba(255,255,255,0.06); padding:2px 6px; border-radius:6px; color: var(--text); }
+    code { background: rgba(0,0,0,0.05); padding:2px 6px; border-radius:6px; color: var(--text); }
+    [data-theme="dark"] code { background: rgba(255,255,255,0.06); }
 
     /* Center + bold event titles */
     .fc-event-title {
@@ -42,33 +60,47 @@
       letter-spacing: 0.4px;
     }
 
-    /* Dark mode tuning for FullCalendar */
+    /* FullCalendar colors tweak to match theme */
     .fc { color: var(--text); }
     .fc .fc-toolbar-title { color: var(--text); }
-    .fc .fc-button { background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: var(--text); }
-    .fc .fc-button:hover { background: rgba(255,255,255,0.10); }
-    .fc .fc-button-primary:not(:disabled).fc-button-active,
-    .fc .fc-button-primary:not(:disabled):active {
-      background: rgba(255,255,255,0.14);
-      border-color: rgba(255,255,255,0.14);
-    }
+    .fc .fc-button { background: rgba(0,0,0,0.04); border: 1px solid var(--border); color: var(--text); }
+    .fc .fc-button:hover { background: rgba(0,0,0,0.07); }
+    [data-theme="dark"] .fc .fc-button { background: rgba(255,255,255,0.06); }
+    [data-theme="dark"] .fc .fc-button:hover { background: rgba(255,255,255,0.10); }
 
     .fc-theme-standard td, .fc-theme-standard th, .fc-theme-standard .fc-scrollgrid {
+      border-color: rgba(0,0,0,0.08);
+    }
+    [data-theme="dark"] .fc-theme-standard td,
+    [data-theme="dark"] .fc-theme-standard th,
+    [data-theme="dark"] .fc-theme-standard .fc-scrollgrid {
       border-color: rgba(255,255,255,0.10);
     }
+
     .fc .fc-daygrid-day-number { color: var(--muted); }
     .fc .fc-col-header-cell-cushion { color: var(--muted); }
 
-    /* Make OFF background events cover the cell nicely */
+    /* OFF background events */
     .fc-bg-event { opacity: 0.55; }
 
-    /* Mobile compact view: smaller font */
+    /* Mobile compact view */
     @media (max-width: 600px) {
       body { margin: 10px; }
       #calendar { padding: 6px; }
       .fc-event-title { font-size: 10px; }
       .fc .fc-toolbar-title { font-size: 18px; }
       select, button { padding: 8px; }
+    }
+
+    /* Small pill button style for theme toggle */
+    .toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      cursor: pointer;
+      user-select: none;
     }
   </style>
 </head>
@@ -97,6 +129,11 @@
 
     <button id="export">Export ICS (iPhone) — 2026</button>
 
+    <button id="themeToggle" class="toggle" type="button" aria-label="Toggle theme">
+      <span id="themeIcon">🌙</span>
+      <span id="themeText">Dark</span>
+    </button>
+
     <div class="legend">
       <span><span class="dot" style="background:var(--day)"></span>Day</span>
       <span><span class="dot" style="background:var(--night)"></span>Night</span>
@@ -120,22 +157,11 @@
     const YEAR_FROM = "2026-01-01";
     const YEAR_TO   = "2026-12-31";
 
-    // Timezone string for iPhone calendar naming (no VTIMEZONE block; iOS handles this well)
-    const ICS_TZ = "America/Toronto"; // Montreal uses the same rules (ET)
+    // Timezone for ICS
+    const ICS_TZ = "America/Toronto";
 
     // -------------------------
-    // Colors
-    // -------------------------
-    const COLORS = {
-      Day: getComputedStyle(document.documentElement).getPropertyValue("--day").trim() || "#1e88e5",
-      Afternoon: getComputedStyle(document.documentElement).getPropertyValue("--aft").trim() || "#fb8c00",
-      Night: getComputedStyle(document.documentElement).getPropertyValue("--night").trim() || "#8e24aa",
-      Off: getComputedStyle(document.documentElement).getPropertyValue("--off").trim() || "#2e7d32"
-    };
-
-    // -------------------------
-    // 14-day work/off pattern
-    // Work 2, Off 2, Work 3, Off 2, Work 2, Off 3
+    // 14-day pattern
     // -------------------------
     const PATTERN_14 = [
       "W","W","O","O",
@@ -145,35 +171,24 @@
       "O","O","O"
     ];
 
-    // Rotation order for platoons (as you specified)
     const TURN_ORDER = ["Day", "Night", "Afternoon"];
 
-    // -------------------------
     // Anchors you provided
-    // anchorDate = first day of a 14-day block
-    // -------------------------
     const GROUPS = {
-      // Platoons
-      A: { mode: "rotate", anchorDate: "2026-01-12", anchorTurn: "Day" },
-      B: { mode: "rotate", anchorDate: "2026-01-12", anchorTurn: "Afternoon" },
-      C: { mode: "rotate", anchorDate: "2026-01-05", anchorTurn: "Day" },
-      D: { mode: "rotate", anchorDate: "2026-01-12", anchorTurn: "Night" },
-      E: { mode: "rotate", anchorDate: "2026-01-05", anchorTurn: "Afternoon" },
-      F: { mode: "rotate", anchorDate: "2026-01-05", anchorTurn: "Night" },
+      A:  { mode: "rotate", anchorDate: "2026-01-12", anchorTurn: "Day" },
+      B:  { mode: "rotate", anchorDate: "2026-01-12", anchorTurn: "Afternoon" },
+      C:  { mode: "rotate", anchorDate: "2026-01-05", anchorTurn: "Day" },
+      D:  { mode: "rotate", anchorDate: "2026-01-12", anchorTurn: "Night" },
+      E:  { mode: "rotate", anchorDate: "2026-01-05", anchorTurn: "Afternoon" },
+      F:  { mode: "rotate", anchorDate: "2026-01-05", anchorTurn: "Night" },
 
-      // Fixed shifts (always same turn; still follow PATTERN_14 for work/off)
-      D1: { mode: "fixed", anchorDate: "2026-01-12", fixedTurn: "Day" },
-      D2: { mode: "fixed", anchorDate: "2026-01-05", fixedTurn: "Day" },
-      A1: { mode: "fixed", anchorDate: "2026-01-12", fixedTurn: "Afternoon" },
-      A2: { mode: "fixed", anchorDate: "2026-01-05", fixedTurn: "Afternoon" }
+      D1: { mode: "fixed",  anchorDate: "2026-01-12", fixedTurn: "Day" },
+      D2: { mode: "fixed",  anchorDate: "2026-01-05", fixedTurn: "Day" },
+      A1: { mode: "fixed",  anchorDate: "2026-01-12", fixedTurn: "Afternoon" },
+      A2: { mode: "fixed",  anchorDate: "2026-01-05", fixedTurn: "Afternoon" }
     };
 
-    // -------------------------
     // Shift hours for ICS export
-    // Day:       06:45 -> 17:30
-    // Afternoon: 16:45 -> 03:30 (next day)
-    // Night:     20:45 -> 07:30 (next day)
-    // -------------------------
     const SHIFT_TIMES = {
       Day:       { start: "064500", end: "173000", crossesMidnight: false },
       Afternoon: { start: "164500", end: "033000", crossesMidnight: true  },
@@ -181,30 +196,43 @@
     };
 
     // -------------------------
+    // Theme toggle (persisted)
+    // -------------------------
+    const THEME_KEY = "SHIFT_THEME";
+    function getPreferredTheme() {
+      const saved = localStorage.getItem(THEME_KEY);
+      if (saved === "light" || saved === "dark") return saved;
+      // Default to dark (you liked it), but you can flip this if you want.
+      return "dark";
+    }
+    function applyTheme(theme) {
+      document.documentElement.setAttribute("data-theme", theme);
+      localStorage.setItem(THEME_KEY, theme);
+
+      const icon = document.getElementById("themeIcon");
+      const text = document.getElementById("themeText");
+      if (theme === "dark") { icon.textContent = "🌙"; text.textContent = "Dark"; }
+      else { icon.textContent = "☀️"; text.textContent = "Light"; }
+    }
+
+    // -------------------------
     // Helpers
     // -------------------------
     function iso(d) { return d.toISOString().slice(0, 10); }
-
-    function addDays(date, days) {
-      const d = new Date(date);
-      d.setDate(d.getDate() + days);
-      return d;
-    }
-
+    function addDays(date, days) { const d = new Date(date); d.setDate(d.getDate() + days); return d; }
     function dayDiff(a, b) {
-      // whole-day diff between a and b, ignoring timezone
       const ms = Date.UTC(a.getFullYear(), a.getMonth(), a.getDate()) - Date.UTC(b.getFullYear(), b.getMonth(), b.getDate());
       return Math.floor(ms / (1000 * 60 * 60 * 24));
     }
-
     function mod(n, m) { return ((n % m) + m) % m; }
-
     function turnIndex(turn) {
       const i = TURN_ORDER.indexOf(turn);
       if (i < 0) throw new Error("Invalid turn: " + turn);
       return i;
     }
-
+    function isMobileCompact() {
+      return window.matchMedia && window.matchMedia("(max-width: 600px)").matches;
+    }
     function turnToLabelUpper(turn, compact) {
       if (compact) {
         if (turn === "Day") return "DAY";
@@ -216,15 +244,18 @@
       return "AFTERNOON SHIFT";
     }
 
-    function isMobileCompact() {
-      return window.matchMedia && window.matchMedia("(max-width: 600px)").matches;
+    function getColors() {
+      const cs = getComputedStyle(document.documentElement);
+      return {
+        Day: cs.getPropertyValue("--day").trim() || "#1e88e5",
+        Night: cs.getPropertyValue("--night").trim() || "#8e24aa",
+        Afternoon: cs.getPropertyValue("--aft").trim() || "#fb8c00",
+        Off: cs.getPropertyValue("--off").trim() || "#2e7d32"
+      };
     }
 
     // -------------------------
-    // Core: compute shift for a group and date
-    // Returns:
-    //  - type: "Day" | "Night" | "Afternoon" | "Off"
-    //  - label: string
+    // Core: compute shift for group/date
     // -------------------------
     function getShiftForDate(groupKey, dateObj) {
       const cfg = GROUPS[groupKey];
@@ -233,39 +264,36 @@
       const anchor = new Date(cfg.anchorDate + "T00:00:00");
       const deltaDays = dayDiff(dateObj, anchor);
 
-      const dayIn14 = mod(deltaDays, 14); // 0..13
-      const wo = PATTERN_14[dayIn14];     // W or O
+      const dayIn14 = mod(deltaDays, 14);
+      const wo = PATTERN_14[dayIn14];
 
-      if (wo === "O") return { label: "OFF", type: "Off" };
+      if (wo === "O") return { type: "Off", turn: "Off" };
 
       let turn;
       if (cfg.mode === "fixed") {
         turn = cfg.fixedTurn;
       } else {
-        const blocksFromAnchor = Math.floor((deltaDays - dayIn14) / 14); // can be negative
+        const blocksFromAnchor = Math.floor((deltaDays - dayIn14) / 14);
         const t0 = turnIndex(cfg.anchorTurn);
         turn = TURN_ORDER[mod(t0 + blocksFromAnchor, 3)];
       }
-
-      return { label: turn, type: turn };
+      return { type: turn, turn };
     }
 
     // -------------------------
-    // Event generation for the fixed year (Month view)
-    // - Shift days: allDay event with title (compact on mobile)
-    // - OFF days: background event only (green), no title
+    // Month-view events (OFF is green only, no text)
     // -------------------------
     function generateYearEvents(groupKey) {
       const start = new Date(YEAR_FROM + "T00:00:00");
       const end = new Date(YEAR_TO + "T00:00:00");
       const compact = isMobileCompact();
+      const COLORS = getColors();
 
       const events = [];
       for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
         const s = getShiftForDate(groupKey, d);
 
         if (s.type === "Off") {
-          // background-only green block, no text
           events.push({
             start: iso(new Date(d)),
             allDay: true,
@@ -276,9 +304,8 @@
         }
 
         const color = COLORS[s.type];
-
         events.push({
-          title: turnToLabelUpper(s.type, compact), // DAY/NIGHT/AFT on mobile, full text on desktop
+          title: turnToLabelUpper(s.type, compact),
           start: iso(new Date(d)),
           allDay: true,
           backgroundColor: color,
@@ -289,10 +316,8 @@
     }
 
     // -------------------------
-    // ICS export for full year 2026
-    // - Creates TIMED events for working shifts with your exact hours
-    // - OFF days: no event (since you want OFF to be just green in the UI)
-    // - Adds calendar name (X-WR-CALNAME) so iPhone shows it properly
+    // ICS timed export (no OFF events)
+    // Includes calendar name
     // -------------------------
     function ymdToICSDate(isoYYYYMMDD) { return isoYYYYMMDD.replaceAll("-", ""); }
 
@@ -311,7 +336,9 @@
       const from = new Date(YEAR_FROM + "T00:00:00");
       const to = new Date(YEAR_TO + "T00:00:00");
 
+      // Friendly calendar name in iPhone
       const calName = `Shift Schedule 2026 - ${groupKey}`;
+
       const lines = [];
       lines.push("BEGIN:VCALENDAR");
       lines.push("VERSION:2.0");
@@ -325,7 +352,7 @@
 
       for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
         const s = getShiftForDate(groupKey, d);
-        if (s.type === "Off") continue; // no OFF events in ICS
+        if (s.type === "Off") continue;
 
         const t = SHIFT_TIMES[s.type];
         const startISO = iso(new Date(d));
@@ -376,17 +403,16 @@
     function renderForSelectedGroup() {
       const groupKey = document.getElementById("group").value;
       saveSelectedGroup(groupKey);
-
       const events = generateYearEvents(groupKey);
 
       if (!calendar) {
         calendar = new FullCalendar.Calendar(document.getElementById("calendar"), {
-          initialView: "dayGridMonth", // month only
+          initialView: "dayGridMonth",
           height: "auto",
           headerToolbar: {
             left: "prev,next today",
             center: "title",
-            right: "" // no week toggle
+            right: ""
           },
           initialDate: YEAR_FROM,
           events
@@ -399,12 +425,14 @@
       }
     }
 
-    // init selected group
+    // -------------------------
+    // Init
+    // -------------------------
+    applyTheme(getPreferredTheme());
+
     document.getElementById("group").value = loadSelectedGroup();
 
-    document.getElementById("group").addEventListener("change", () => {
-      renderForSelectedGroup();
-    });
+    document.getElementById("group").addEventListener("change", renderForSelectedGroup);
 
     document.getElementById("export").addEventListener("click", () => {
       const groupKey = document.getElementById("group").value;
@@ -412,13 +440,21 @@
       downloadText(`Shift-${groupKey}-2026.ics`, ics);
     });
 
-    // Re-render if screen size changes (mobile/desktop titles)
+    document.getElementById("themeToggle").addEventListener("click", () => {
+      const current = document.documentElement.getAttribute("data-theme") || "light";
+      const next = (current === "dark") ? "light" : "dark";
+      applyTheme(next);
+
+      // Re-render so compact labels / colors remain correct
+      renderForSelectedGroup();
+    });
+
+    // Re-render if screen size changes (mobile/desktop compact labels)
     if (window.matchMedia) {
       const mq = window.matchMedia("(max-width: 600px)");
       mq.addEventListener?.("change", () => renderForSelectedGroup());
     }
 
-    // First render
     renderForSelectedGroup();
   </script>
 </body>
